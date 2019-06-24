@@ -76,7 +76,6 @@ class NexusCollector(object):
         yield GaugeMetricFamily('nexus_threads_used',
             'Threads Used', value=run_time['threads'])
 
-        print(data['system-filestores'])
         for fsname, details in data['system-filestores'].items():
 
             mount = self._mount_point(details['description'])
@@ -192,8 +191,8 @@ class NexusCollector(object):
         result2 = requests.get(url, auth=self._auth)
         result.raise_for_status()
         result2.raise_for_status()
-        print(result2.text)
         data = result.json()
+        # TODO Fix this
         data['gauges'] = result2.json()['gauges']
         data['meters'] = result2.json()['meters']
         data['timers'] = result2.json()['timers']
