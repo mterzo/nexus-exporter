@@ -3,7 +3,7 @@
 import os
 import json
 import time
-import base64
+import requests
 try:
     import urllib2
     from urlparse import urlparse
@@ -59,39 +59,26 @@ def parse():
 class NexusCollector(object):
     def __init__(self, target, user, password):
         self._target = target.rstrip("/")
-        self._auth = base64.standard_b64encode('%s:%s' % (user, password))
-        self._info = {}
-        self._data = {}
+        self._auth = (user, password)
 
     def collect(self):
-        # make requests
-        try:
-            self._request_data()
-        except HTTPError as err:
-            if err.code == 401:
-                fatal('Authentication failure, attempting to restart')
-        except URLError as err:
-            fatal(err)
+        data = self._request_data()
 
-        i = self._info['system-runtime']
-        yield GaugeMetricFamily(
-            'nexus_processors_available',
-            'Available Processors', value=i['availableProcessors'])
-        yield GaugeMetricFamily(
-            'nexus_free_memory_bytes',
-            'Free Memory (bytes)', value=i['freeMemory'])
-        yield GaugeMetricFamily(
-            'nexus_total_memory_bytes',
-            'Total Memory (bytes)', value=i['totalMemory'])
-        yield GaugeMetricFamily(
-            'nexus_max_memory_bytes',
-            'Max Memory (bytes)', value=i['maxMemory'])
-        yield GaugeMetricFamily(
-            'nexus_threads_used',
-            'Threads Used', value=i['threads'])
+        run_time = data['system-runtime']
+        yield GaugeMetricFamily('nexus_processors_available',
+            'Available Processors', value=run_time['availableProcessors'])
+        yield GaugeMetricFamily('nexus_free_memory_bytes',
+            'Free Memory (bytes)', value=run_time['freeMemory'])
+        yield GaugeMetricFamily('nexus_total_memory_bytes',
+            'Total Memory (bytes)', value=run_time['totalMemory'])
+        yield GaugeMetricFamily('nexus_max_memory_bytes',
+            'Max Memory (bytes)', value=run_time['maxMemory'])
+        yield GaugeMetricFamily('nexus_threads_used',
+            'Threads Used', value=run_time['threads'])
 
-        i = self._info['system-filestores']
-        for fsname, details in i.iteritems():
+        print(data['system-filestores'])
+        for fsname, details in data['system-filestores'].items():
+
             mount = self._mount_point(details['description'])
             fts = GaugeMetricFamily(
                 'nexus_filestore_total_space_bytes',
@@ -118,138 +105,99 @@ class NexusCollector(object):
                  str(details['readOnly'])], details['unallocatedSpace'])
             yield fas
 
-        i = self._data['gauges']
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_heap_committed_bytes',
-            '', value=i['jvm.memory.heap.committed']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_heap_init_bytes',
-            '', value=i['jvm.memory.heap.init']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_heap_max_bytes',
-            '', value=i['jvm.memory.heap.max']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_heap_used_bytes',
-            '', value=i['jvm.memory.heap.used']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_nonheap_committed_bytes',
-            '', value=i['jvm.memory.non-heap.committed']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_nonheap_init_bytes',
-            '', value=i['jvm.memory.non-heap.init']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_nonheap_max_bytes',
-            '', value=i['jvm.memory.non-heap.max']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_nonheap_used_bytes',
-            '', value=i['jvm.memory.non-heap.used']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_total_committed_bytes',
-            '', value=i['jvm.memory.total.committed']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_total_init_bytes',
-            '', value=i['jvm.memory.total.init']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_total_max_bytes',
-            '', value=i['jvm.memory.total.max']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_memory_total_used_bytes',
-            '', value=i['jvm.memory.total.used']['value'])
-        yield GaugeMetricFamily(
-            'nexus_jvm_uptime_seconds',
-            '', value=i['jvm.vm.uptime']['value']/1000.0)
+        gauges = data['gauges']
+        yield GaugeMetricFamily('nexus_jvm_memory_heap_committed_bytes',
+            '', value=gauges['jvm.memory.heap.committed']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_heap_init_bytes',
+            '', value=gauges['jvm.memory.heap.init']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_heap_max_bytes',
+            '', value=gauges['jvm.memory.heap.max']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_heap_used_bytes',
+            '', value=gauges['jvm.memory.heap.used']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_nonheap_committed_bytes',
+            '', value=gauges['jvm.memory.non-heap.committed']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_nonheap_init_bytes',
+            '', value=gauges['jvm.memory.non-heap.init']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_nonheap_max_bytes',
+            '', value=gauges['jvm.memory.non-heap.max']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_nonheap_used_bytes',
+            '', value=gauges['jvm.memory.non-heap.used']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_total_committed_bytes',
+            '', value=gauges['jvm.memory.total.committed']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_total_init_bytes',
+            '', value=gauges['jvm.memory.total.init']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_total_max_bytes',
+            '', value=gauges['jvm.memory.total.max']['value'])
+        yield GaugeMetricFamily('nexus_jvm_memory_total_used_bytes',
+            '', value=gauges['jvm.memory.total.used']['value'])
+        yield GaugeMetricFamily('nexus_jvm_uptime_seconds',
+            '', value=gauges['jvm.vm.uptime']['value']/1000.0)
 
-        i = self._data['meters']
-        et = GaugeMetricFamily(
-            'nexus_events_total', 'Nexus Events Count', labels=['level'])
-        et.add_metric(['trace'], i['metrics.trace']['count'])
-        et.add_metric(['debug'], i['metrics.debug']['count'])
-        et.add_metric(['info'], i['metrics.info']['count'])
-        et.add_metric(['warn'], i['metrics.warn']['count'])
-        et.add_metric(['error'], i['metrics.error']['count'])
+        metrics = data['meters']
+        et = GaugeMetricFamily('nexus_events_total', 'Nexus Events Count', labels=['level'])
+        et.add_metric(['trace'], metrics['metrics.trace']['count'])
+        et.add_metric(['debug'], metrics['metrics.debug']['count'])
+        et.add_metric(['info'], metrics['metrics.info']['count'])
+        et.add_metric(['warn'], metrics['metrics.warn']['count'])
+        et.add_metric(['error'], metrics['metrics.error']['count'])
         yield et
 
         hr = GaugeMetricFamily(
             'nexus_webapp_http_response_total',
             'Nexus Webapp HTTP Response Count', labels=['code'])
-        hr.add_metric(
-            ['1xx'],
-            i['org.eclipse.jetty.webapp.WebAppContext.1xx-responses']['count'])
-        hr.add_metric(
-            ['2xx'],
-            i['org.eclipse.jetty.webapp.WebAppContext.2xx-responses']['count'])
-        hr.add_metric(
-            ['3xx'],
-            i['org.eclipse.jetty.webapp.WebAppContext.3xx-responses']['count'])
-        hr.add_metric(
-            ['4xx'],
-            i['org.eclipse.jetty.webapp.WebAppContext.4xx-responses']['count'])
-        hr.add_metric(
-            ['5xx'],
-            i['org.eclipse.jetty.webapp.WebAppContext.5xx-responses']['count'])
+        hr.add_metric(['1xx'],
+            metrics['org.eclipse.jetty.webapp.WebAppContext.1xx-responses']['count'])
+        hr.add_metric(['2xx'],
+            metrics['org.eclipse.jetty.webapp.WebAppContext.2xx-responses']['count'])
+        hr.add_metric(['3xx'],
+            metrics['org.eclipse.jetty.webapp.WebAppContext.3xx-responses']['count'])
+        hr.add_metric(['4xx'],
+            metrics['org.eclipse.jetty.webapp.WebAppContext.4xx-responses']['count'])
+        hr.add_metric(['5xx'],
+            metrics['org.eclipse.jetty.webapp.WebAppContext.5xx-responses']['count'])
         yield hr
 
-        i = self._data['timers']
-        hq = GaugeMetricFamily(
-            'nexus_webapp_http_request_total',
+        timers = data['timers']
+        hq = GaugeMetricFamily('nexus_webapp_http_request_total',
             'Nexus Webapp HTTP Request Count', labels=['method'])
-        hq.add_metric(
-            ['connect'],
-            i[
-                'org.eclipse.jetty.webapp.WebAppContext.connect-requests'
-            ]['count'])
-        hq.add_metric(
-            ['delete'],
-            i[
-                'org.eclipse.jetty.webapp.WebAppContext.delete-requests'
-            ]['count'])
-        hq.add_metric(
-            ['get'],
-            i['org.eclipse.jetty.webapp.WebAppContext.get-requests']['count'])
-        hq.add_metric(
-            ['head'],
-            i['org.eclipse.jetty.webapp.WebAppContext.head-requests']['count'])
-        hq.add_metric(
-            ['move'],
-            i['org.eclipse.jetty.webapp.WebAppContext.move-requests']['count'])
-        hq.add_metric(
-            ['options'],
-            i[
-                'org.eclipse.jetty.webapp.WebAppContext.options-requests'
-            ]['count'])
-        hq.add_metric(
-            ['other'],
-            i[
-                'org.eclipse.jetty.webapp.WebAppContext.other-requests'
-            ]['count'])
-        hq.add_metric(
-            ['post'],
-            i['org.eclipse.jetty.webapp.WebAppContext.post-requests']['count'])
-        hq.add_metric(
-            ['put'],
-            i['org.eclipse.jetty.webapp.WebAppContext.put-requests']['count'])
-        hq.add_metric(
-            ['trace'],
-            i[
-                'org.eclipse.jetty.webapp.WebAppContext.trace-requests'
-            ]['count'])
+        hq.add_metric(['connect'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.connect-requests']['count'])
+        hq.add_metric(['delete'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.delete-requests']['count'])
+        hq.add_metric(['get'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.get-requests']['count'])
+        hq.add_metric(['head'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.head-requests']['count'])
+        hq.add_metric(['move'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.move-requests']['count'])
+        hq.add_metric(['options'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.options-requests']['count'])
+        hq.add_metric(['other'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.other-requests']['count'])
+        hq.add_metric(['post'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.post-requests']['count'])
+        hq.add_metric(['put'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.put-requests']['count'])
+        hq.add_metric(['trace'],
+            timers['org.eclipse.jetty.webapp.WebAppContext.trace-requests']['count'])
         yield hq
 
     def _mount_point(self, description):
         return description.split('(')[0].strip()
 
     def _request_data(self):
-        info_request = urllib2.Request(
-            "{0}/service/rest/atlas/system-information".format(
-                self._target))
-        info_request.add_header("Authorization", "Basic %s" % self._auth)
-        self._info = json.loads(urllib2.urlopen(info_request).read())
-
-        data_request = urllib2.Request("{0}/service/metrics/data".format(
-                self._target))
-        data_request.add_header("Authorization", "Basic %s" % self._auth)
-        self._data = json.loads(urllib2.urlopen(data_request).read())
-
+        url = "{0}/service/rest/atlas/system-information".format(self._target)
+        result = requests.get(url, auth=self._auth)
+        url = "{0}/service/metrics/data".format(self._target)
+        result2 = requests.get(url, auth=self._auth)
+        result.raise_for_status()
+        result2.raise_for_status()
+        print(result2.text)
+        data = result.json()
+        data['gauges'] = result2.json()['gauges']
+        data['meters'] = result2.json()['meters']
+        data['timers'] = result2.json()['timers']
+        return data
 
 def fatal(msg):
     print(msg)
